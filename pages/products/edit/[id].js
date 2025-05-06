@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Form, Input, Button, Select, message, Row, Col, Card, Upload, Modal, Checkbox, Switch, InputNumber } from 'antd';
+import { Form, Input, Button, Select, message, Row, Col, Card, Upload, Checkbox, Switch } from 'antd';
 import { UploadOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/router';
 
@@ -9,12 +9,11 @@ const { Option } = Select;
 const EditProductForm = () => {
   const [form] = Form.useForm();
   const [categories, setCategories] = useState([]);
+  const [dealers, setDealers] = useState([]);
+  const [companies, setCompanies] = useState([]); // New state for companies
   const [albums, setAlbums] = useState([]);
   const [imageList, setImageList] = useState([]);
-  const [previewVisible, setPreviewVisible] = useState(false);
-  const [previewImage, setPreviewImage] = useState('');
   const [priceDetails, setPriceDetails] = useState([]);
-  const [inStock, setInStock] = useState(0);
   const [available, setAvailable] = useState(true);
   const [isCakeProduct, setIsCakeProduct] = useState(false);
   const [isVeg, setIsVeg] = useState(true);
@@ -22,18 +21,17 @@ const EditProductForm = () => {
   const router = useRouter();
   const { id } = router.query;
 
-  const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
+  const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://apib.dinasuvadu.in';
 
   const fetchCategories = async () => {
     try {
-      const token = localStorage.getItem('token'); // ✅ Add token
+      const token = localStorage.getItem('token');
       const response = await fetch(`${BACKEND_URL}/api/categories/list-categories`, {
-        headers: { 'Authorization': `Bearer ${token}` }, // ✅ Include Authorization header
+        headers: { 'Authorization': `Bearer ${token}` },
       });
       const data = await response.json();
-      console.log('Categories Fetch Response:', data); // ✅ Debug log
       if (response.ok) {
-        setCategories(Array.isArray(data) ? data : []); // ✅ Ensure array
+        setCategories(Array.isArray(data) ? data : []);
       } else {
         message.error('Failed to fetch categories');
         setCategories([]);
@@ -45,14 +43,50 @@ const EditProductForm = () => {
     }
   };
 
-  const fetchAlbums = async () => {
+  const fetchDealers = async () => {
     try {
-      const token = localStorage.getItem('token'); // ✅ Add token for consistency
-      const response = await fetch(`${BACKEND_URL}/api/albums`, {
-        headers: { 'Authorization': `Bearer ${token}` }, // ✅ Add token if required
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${BACKEND_URL}/api/dealers`, {
+        headers: { 'Authorization': `Bearer ${token}` },
       });
       const data = await response.json();
-      console.log('Albums Fetch Response:', data); // ✅ Debug log
+      if (response.ok) {
+        setDealers(Array.isArray(data) ? data : []);
+      } else {
+        message.error('Failed to fetch dealers');
+        setDealers([]);
+      }
+    } catch (error) {
+      console.error('Error fetching dealers:', error);
+      message.error('Error fetching dealers');
+      setDealers([]);
+    }
+  };
+
+  const fetchCompanies = async () => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/companies`);
+      const data = await response.json();
+      if (response.ok) {
+        setCompanies(Array.isArray(data) ? data : []);
+      } else {
+        message.error('Failed to fetch companies');
+        setCompanies([]);
+      }
+    } catch (error) {
+      console.error('Error fetching companies:', error);
+      message.error('Error fetching companies');
+      setCompanies([]);
+    }
+  };
+
+  const fetchAlbums = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${BACKEND_URL}/api/albums`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const data = await response.json();
       if (response.ok) {
         setAlbums(Array.isArray(data) ? data : []);
       } else {
@@ -67,37 +101,40 @@ const EditProductForm = () => {
   };
 
   const fetchProduct = async () => {
-    if (!id) return;
     try {
-      const token = localStorage.getItem('token'); // ✅ Add token
+      const token = localStorage.getItem('token');
       const response = await fetch(`${BACKEND_URL}/api/products/${id}`, {
-        headers: { 'Authorization': `Bearer ${token}` }, // ✅ Add token if required
+        headers: { 'Authorization': `Bearer ${token}` },
       });
+      const product = await response.json();
       if (response.ok) {
-        const product = await response.json();
-        console.log('Fetched Product:', product);
-
+        const dealerIds = Array.isArray(product.dealers)
+          ? product.dealers.map(dealer => 
+              typeof dealer === 'object' && dealer._id ? dealer._id : dealer
+            )
+          : [];
+        
         form.setFieldsValue({
           name: product.name,
-          category: product.category?._id || null, // ✅ Handle null/undefined category
-          album: product.album ? product.album._id : undefined,
-          description: product.description,
-          foodNotes: product.foodNotes,
-          ingredients: product.ingredients,
+          category: product.category?._id || product.category,
+          dealers: dealerIds,
+          company: product.company?._id || product.company || undefined, // Pre-fill company
+          album: product.album?._id || product.album,
+          description: product.description || '',
+          foodNotes: product.foodNotes || '',
+          ingredients: product.ingredients || '',
         });
-
-        setInStock(product.inStock);
+        setPriceDetails(product.priceDetails || []);
+        setImageList(product.images.map((img, index) => ({
+          uid: index,
+          name: img,
+          status: 'done',
+          url: `${BACKEND_URL}/Uploads/${img}`,
+        })));
         setAvailable(product.available);
         setIsCakeProduct(product.productType === 'cake');
         setIsVeg(product.isVeg);
-        setIsPastry(product.isPastry || false);
-        setPriceDetails(product.priceDetails);
-        setImageList(product.images.map((img, index) => ({
-          uid: `-existing-${index}`,
-          name: `image-${index}`,
-          status: 'done',
-          url: `${BACKEND_URL}/uploads/${img}`,
-        })));
+        setIsPastry(product.isPastry);
       } else {
         message.error('Failed to fetch product');
       }
@@ -108,9 +145,13 @@ const EditProductForm = () => {
   };
 
   useEffect(() => {
-    fetchCategories();
-    fetchAlbums();
-    fetchProduct();
+    if (id) {
+      fetchProduct();
+      fetchCategories();
+      fetchDealers();
+      fetchCompanies(); // Fetch companies
+      fetchAlbums();
+    }
   }, [id]);
 
   const handlePriceChange = (index, field, value) => {
@@ -124,57 +165,40 @@ const EditProductForm = () => {
     setPriceDetails(updatedDetails);
   };
 
-  const handleImageUpload = (file) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setImageList((prev) => [
-        ...prev,
-        {
-          uid: file.uid,
-          name: file.name,
-          status: 'done',
-          url: e.target.result,
-          originFileObj: file,
-        },
-      ]);
-    };
-    reader.readAsDataURL(file);
-    return false;
-  };
-
   const onFinish = async (values) => {
     console.log('🚀 Updating Product:', values);
 
     const formData = new FormData();
     formData.append('name', values.name);
     formData.append('category', values.category);
+    formData.append('dealers', JSON.stringify(values.dealers || []));
+    formData.append('company', values.company || ''); // Add company
     if (isCakeProduct && values.album) {
       formData.append('album', values.album);
     }
     formData.append('description', values.description || '');
     formData.append('foodNotes', values.foodNotes || '');
     formData.append('ingredients', values.ingredients || '');
-    formData.append('inStock', inStock);
     formData.append('available', available);
     formData.append('isVeg', isVeg);
-    formData.append('isCakeProduct', isCakeProduct);
     formData.append('isPastry', isPastry);
+    formData.append('isCakeProduct', isCakeProduct);
 
     imageList.forEach((file) => {
       if (file.originFileObj) {
         formData.append('images', file.originFileObj);
-      } else if (file.url) {
-        formData.append('existingImages', file.url.split('/').pop());
       }
     });
 
     formData.append('priceDetails', JSON.stringify(priceDetails));
 
     try {
-      const token = localStorage.getItem('token'); // ✅ Add token
+      const token = localStorage.getItem('token');
       const response = await fetch(`${BACKEND_URL}/api/products/${id}`, {
         method: 'PUT',
-        headers: { 'Authorization': `Bearer ${token}` }, // ✅ Add token if required
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
         body: formData,
       });
 
@@ -193,11 +217,27 @@ const EditProductForm = () => {
     }
   };
 
+  const getFirstName = (dealerName) => {
+    if (!dealerName) return 'Unknown';
+    const parts = dealerName.split(' ');
+    return parts[0] || dealerName;
+  };
+
+  const dropdownWidth = Math.min(200 + dealers.length * 10, 600);
+  const companyDropdownWidth = Math.min(200 + companies.length * 10, 600);
+
   return (
     <div style={{ maxWidth: '800px', margin: '0 auto', background: '#fff', padding: '15px', borderRadius: '8px', boxShadow: '0 4px 8px rgba(0,0,0,0.1)' }}>
       <Row justify="space-between" align="middle" style={{ marginBottom: '15px' }}>
         <h2 style={{ margin: 0 }}>Edit Product</h2>
         <Row align="middle">
+          <Checkbox
+            checked={available}
+            onChange={(e) => setAvailable(e.target.checked)}
+            style={{ marginRight: '8px' }}
+          >
+            Product is Available
+          </Checkbox>
           <Checkbox
             checked={isCakeProduct}
             onChange={(e) => setIsCakeProduct(e.target.checked)}
@@ -232,8 +272,76 @@ const EditProductForm = () => {
           <Input placeholder="Enter product name" />
         </Form.Item>
 
+        <Form.Item
+          label="Dealers"
+          name="dealers"
+          rules={[{ required: true, message: 'Please select at least one dealer!' }]}
+          style={{ marginBottom: '8px' }}
+        >
+          <Select
+            mode="multiple"
+            placeholder="Select Dealers"
+            showSearch
+            filterOption={(input, option) =>
+              getFirstName(option.label).toLowerCase().includes(input.toLowerCase())
+            }
+            dropdownRender={() => (
+              <div style={{ padding: '8px', maxHeight: '300px', overflowY: 'auto' }}>
+                {dealers.map(dealer => (
+                  <div key={dealer._id} style={{ marginBottom: '4px' }}>
+                    <Checkbox
+                      value={dealer._id}
+                      checked={form.getFieldValue('dealers')?.includes(dealer._id)}
+                      onChange={(e) => {
+                        const currentDealers = form.getFieldValue('dealers') || [];
+                        const newDealers = e.target.checked
+                          ? [...currentDealers, dealer._id]
+                          : currentDealers.filter(id => id !== dealer._id);
+                        form.setFieldsValue({ dealers: newDealers });
+                      }}
+                      title={dealer.dealer_name}
+                    >
+                      {getFirstName(dealer.dealer_name)}
+                    </Checkbox>
+                  </div>
+                ))}
+              </div>
+            )}
+            style={{ width: 'auto', minWidth: dropdownWidth, maxWidth: '100%' }}
+            dropdownStyle={{ minWidth: dropdownWidth }}
+          >
+            {dealers.map(dealer => (
+              <Option key={dealer._id} value={dealer._id} label={dealer.dealer_name}>
+                {getFirstName(dealer.dealer_name)}
+              </Option>
+            ))}
+          </Select>
+        </Form.Item>
+
+        <Form.Item
+          label="Company"
+          name="company"
+          style={{ marginBottom: '8px' }}
+        >
+          <Select
+            placeholder="Select Company"
+            showSearch
+            allowClear
+            filterOption={(input, option) =>
+              option.children.toLowerCase().includes(input.toLowerCase())
+            }
+            style={{ width: 'auto', minWidth: companyDropdownWidth, maxWidth: '100%' }}
+          >
+            {companies.map(company => (
+              <Option key={company._id} value={company._id}>
+                {company.name}
+              </Option>
+            ))}
+          </Select>
+        </Form.Item>
+
         <Row gutter={12}>
-          <Col span={12}>
+          <Col span={isCakeProduct ? 12 : 24}>
             <Form.Item
               label="Category"
               name="category"
@@ -266,7 +374,7 @@ const EditProductForm = () => {
                     ))
                   ) : (
                     <Option disabled>No albums available</Option>
-                  )}
+                )}
                 </Select>
               </Form.Item>
             </Col>
@@ -285,45 +393,21 @@ const EditProductForm = () => {
           <Input placeholder="Enter ingredients (comma-separated)" />
         </Form.Item>
 
-        <Row gutter={12}>
-          <Col span={12}>
-            <Form.Item label="In Stock">
-              <InputNumber
-                min={0}
-                value={inStock}
-                onChange={(value) => setInStock(value)}
-                style={{ width: '100%' }}
-              />
-            </Form.Item>
-          </Col>
-          <Col span={12}>
-            <Form.Item label="Available">
-              <Checkbox checked={available} onChange={(e) => setAvailable(e.target.checked)}>
-                Product is Available
-              </Checkbox>
-            </Form.Item>
-          </Col>
-        </Row>
-
         <Form.Item label="Product Images">
           <Upload
             listType="picture-card"
             fileList={imageList}
-            beforeUpload={handleImageUpload}
-            onPreview={async (file) => {
-              let previewUrl = file.url || (file.originFileObj ? URL.createObjectURL(file.originFileObj) : file.preview);
-              setPreviewImage(previewUrl);
-              setPreviewVisible(true);
+            beforeUpload={(file) => {
+              setImageList([...imageList, file]);
+              return false;
             }}
+            onChange={({ fileList }) => setImageList(fileList)}
             onRemove={(file) => {
-              setImageList(imageList.filter((item) => item !== file));
+              setImageList(imageList.filter((item) => item.uid !== file.uid));
             }}
           >
             <Button icon={<UploadOutlined />}>Upload</Button>
           </Upload>
-          <Modal open={previewVisible} footer={null} onCancel={() => setPreviewVisible(false)}>
-            <img alt="Preview" style={{ width: '100%' }} src={previewImage} />
-          </Modal>
         </Form.Item>
 
         <Button
@@ -434,10 +518,10 @@ const EditProductForm = () => {
               </Col>
             </Row>
           </Card>
-       ))}
+        ))}
 
         <Form.Item>
-          <Button type="primary" htmlType="submit">Update Product</Button>
+          <Button type="primary" htmlType="submit">Update</Button>
         </Form.Item>
       </Form>
     </div>
